@@ -119,7 +119,7 @@ status_t PublicVolume::doMount() {
         char value[PROPERTY_VALUE_MAX];
         property_get("ro.factory.storage_suppntfs", value, "");
         if (strcmp("true", value) == 0) {
-            int res = Ntfs::check(mDevPath.c_str());
+            int res = ntfs::Check(mDevPath.c_str());
             if (res == 0 || res == 1) {
                 LOG(DEBUG) << getId() << " passed filesystem check";
             } else {
@@ -139,6 +139,10 @@ status_t PublicVolume::doMount() {
             PLOG(ERROR) << getId() << " failed filesystem check";
             return -EIO;
         }
+        if (fs_prepare_dir(mRawPath.c_str(), 0777, AID_ROOT, AID_MEDIA_RW)) {   
+                PLOG(ERROR) << getId() << " failed to create mount points";
+                return -errno;
+       }
     }  else if (mFsType == "f2fs" && f2fs::IsSupported()) {
         int res = f2fs::Check(mDevPath);
         if (res == 0) {
@@ -190,7 +194,8 @@ status_t PublicVolume::doMount() {
             return -EIO;
         }
     } else if (mFsType == "ntfs") {
-        if (Ntfs::doMount(mDevPath.c_str(), mRawPath.c_str(), false, false, false)) {
+        if (ntfs::Mount(mDevPath, mRawPath, false, false, false, AID_ROOT,
+                        (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007, true)) {
             PLOG(ERROR) << getId() << " nfts failed to mount " << mDevPath;
             return -EIO;
         }
@@ -247,6 +252,7 @@ status_t PublicVolume::doMount() {
                         "-u", "1023", // AID_MEDIA_RW
                         "-g", "1023", // AID_MEDIA_RW
                         "-U", std::to_string(getMountUserId()).c_str(),
+                        "-w",
                         mRawPath.c_str(),
                         stableName.c_str(),
                         NULL)) {
